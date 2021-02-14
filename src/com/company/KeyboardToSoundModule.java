@@ -1,5 +1,7 @@
 package net.snortum.play.midi;
 
+import com.company.AppConfig;
+
 import javax.sound.midi.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,11 +10,10 @@ import java.util.List;
 
 /**
  * Create a connection between a musical keyboard (transmitter) and an internal
- * synthesizer.  You should first run {@link MidiDeviceDisplay} to discover the
- * device names for each of these.
+ * synthesizer.
  *
  * @author Knute Snortum, Modified by Anton Minnie
- * @version 2017/06/17
+ * @version 2021/02/14
  */
 public class KeyboardToSoundModule {
 
@@ -29,7 +30,6 @@ public class KeyboardToSoundModule {
     //private static final String SYNTH_DEV_NAME = "javax.sound.midi.Synthesizer#Microsoft MIDI Mapper";
 
     private static final String TRANS_DEV_NAME = "javax.sound.midi.Transmitter#2- Seaboard RISE 49";
-    //private static final String SYNTH_DEV_NAME = "javax.sound.midi.Synthesizer#Deebach-Blackbox";
     private static final String SYNTH_DEV_NAME = "javax.sound.midi.Synthesizer#Gervill";
     private static final String SEQ_DEV_NAME = "default";
 
@@ -42,8 +42,11 @@ public class KeyboardToSoundModule {
     Sequencer sequencer;
     Receiver midircv;
 
-    private String selindevice = "Seaboard";
+    private String selindevice = "2- Seaboard RISE 49";
     private String seloutdevice = "Deebach-Blackbox";
+
+    final List<StatusMidiDevice> InDeviceList = new ArrayList<>();
+    final List<StatusMidiDevice> OutDeviceList = new ArrayList<>();
 
     // Layered channels out (defaulted): presetIdx, channelInIdx, (ChannelOutIdx & ModuleIdx) * 10, OctaveTran
     private byte[] channelOutStruct = {0, 13, 0, 0, 14, 0, 15, 0, 16, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,};
@@ -61,19 +64,33 @@ public class KeyboardToSoundModule {
 
         @Override
         public String toString() {
-            String devicestring = "Active:" + isactive + " Device:" + device.getDeviceInfo().toString();
+            String devicestring = "Device Status Active:" + isactive + " Device:" + device.getDeviceInfo().toString();
             return devicestring;
         }
     }
 
-    final List<StatusMidiDevice> InDeviceList = new ArrayList<>();
-    final List<StatusMidiDevice> OutDeviceList = new ArrayList<>();
-
+    /*
+     * Start of main utility
+     */
     public static void main(String[] args) {
         new net.snortum.play.midi.KeyboardToSoundModule().run();
     }
 
     private void run() {
+
+        // Load Config File Properties
+        AppConfig config = new AppConfig();
+        if (!config.loadProperties()) {
+            System.err.println("Failed to load AppConfig file!");
+            System.exit(-1);
+        }
+        if (!config.saveProperties()) {
+            System.err.println("Failed to save AppConfig file!");
+            System.exit(-1);
+        };
+
+        selindevice = config.getInDevice();
+        seloutdevice = config.getOutDevice();
 
         // Initialize Input and Output Device Lists
         loadMidiDevices();
@@ -82,23 +99,20 @@ public class KeyboardToSoundModule {
         listOutDevices();
 
         try {
-            // Get output Synth or external Sound MOdule
+            // Get output Synth or external Sound Module
             midircv = openMidiReceiver();
             if (midircv == null) {
                 return;
             }
 
-            // Get a transmitter and synthesizer from their device names
-            // using system properties or defaults
+            // Get a transmitter and synthesizer from their device names using system properties or defaults
             Transmitter trans = getTransmitter();
             if (trans == null) {
                 return;
             }
 
-            // You get your receiver from the synthesizer, then set it in
-            // your transmitter.  Optionally, you can create an implementation
-            // of Receiver to display the messages before they're sent.
-            //trans.setReceiver(midircv); // or just "receiver"
+            // Get receiver from the synthesizer, then set it in transmitter.
+            //trans.setReceiver(midircv);
             AMidiFXReceiver displayReceiver = new AMidiFXReceiver(midircv); // optional
             trans.setReceiver(displayReceiver); // or just "receiver"
 
@@ -111,11 +125,9 @@ public class KeyboardToSoundModule {
             sequencer.open();
             sequencer.getTransmitter().setReceiver(midircv);
 
-            // You should be able to play on your musical keyboard (transmitter)
-            // and hear sounds through your PC synthesizer (receiver)
             System.out.println("Play on your musical keyboard...");
 
-            // Play Demo Sequencer Song in parallel with Keyboard input
+            // Demo Play Sequencer Song in parallel with Keyboard input
             playDemoSequence(1);
 
             sequencer.close();
@@ -134,19 +146,17 @@ public class KeyboardToSoundModule {
 
             sequencer.setTempoInBPM(144.0f);
 
-            // Input MIDI data
             try {
                 sequencer.setSequence(getMidiInputData());
-            } catch (InvalidMidiDataException e1) {
+            }
+            catch (InvalidMidiDataException e1) {
                 e1.printStackTrace();
                 return;
             }
 
-            // Play sequence
-            // Sleep, or first note is too long
+            // Start demo sequence
             sleep(200);
             sequencer.start();
-
             while (sequencer.isRunning()) {
                 sleep(1000);
             }
@@ -158,7 +168,7 @@ public class KeyboardToSoundModule {
 
 
     /**
-     * @return a specific synthesizer object by setting the system property, otherwise the default
+     * Return a specific synthesizer object by setting the system property, otherwise the default
      */
     private Synthesizer getSynthesizer() {
         if (! SYNTH_DEV_NAME.isEmpty() || ! "default".equalsIgnoreCase(SYNTH_DEV_NAME)) {
@@ -176,7 +186,7 @@ public class KeyboardToSoundModule {
     }
 
     /**
-     * @return a specific transmitter object by setting the system property, otherwise the default
+     * Return a specific transmitter object by setting the system property, otherwise the default
      */
     private Transmitter getTransmitter() {
         if (! TRANS_DEV_NAME.isEmpty() && ! "default".equalsIgnoreCase(TRANS_DEV_NAME)) {
@@ -194,8 +204,7 @@ public class KeyboardToSoundModule {
     }
 
     /**
-     * @return a specific sequencer object by setting the system property,
-     *         otherwise the default
+     * Rreturn a specific sequencer object by setting the system property, otherwise the default
      */
     private Sequencer getSequencer() {
         if (!SEQ_DEV_NAME.isEmpty()
@@ -214,11 +223,7 @@ public class KeyboardToSoundModule {
     }
 
     /**
-     * Implementation of {@link Receiver} that will display the MIDI message
-     * before sending it.
-     *
-     * @author Knute Snortum
-     * @version 2017/06/16
+     * Implement custom Receiver to read Keyboard input and layer/multiplex
      */
     private class AMidiFXReceiver implements Receiver {
         private Receiver receiver;
@@ -241,7 +246,7 @@ public class KeyboardToSoundModule {
             receiver.close();
         }
 
-        // Display MIDI message
+        // Prepare to Route and Layer incoming MIDI messages
         private void routeMessage(MidiMessage message, long timeStamp) {
 
             //receiver.send(message, timeStamp);
@@ -265,7 +270,6 @@ public class KeyboardToSoundModule {
             // These statuses have MIDI channel numbers and data (except 0xf0 thru 0xff)
             // Strip channel number out of status
             int leftNibble = status & 0xf0;
-
             switch (leftNibble) {
                 case 0x80: //displayNoteOff(message);
                 case 0x90: //displayNoteOn(message);
@@ -287,7 +291,7 @@ public class KeyboardToSoundModule {
             }
         }
 
-        // Play original note and any layering as needed
+        // Play original keyboard messages and any layering as needed
         private void layerMessages(MidiMessage message, long timeStamp) {
             ShortMessage shortmessage;
 
@@ -301,7 +305,6 @@ public class KeyboardToSoundModule {
             int command = message.getStatus() & 0xf0;
             int channel = message.getStatus() & 0x0f;
 
-            // Layer input layer to output channels
             try {
                 // Layer the first/origin Channel
                 int chan = channelOutStruct[2];
@@ -313,13 +316,14 @@ public class KeyboardToSoundModule {
                     System.out.println("Layer Channel index[0]: " + chan);
                 }
 
-                // Lookup and layer the remaining channels until a 0 out is found
+                // Lookup and layer the remaining up to 9 channels until a 0 out is found
                 int startidx = 4;
                 int idx = 0;
 
                 chan = channelOutStruct[startidx];
                 if ((chan < 0) || (chan > 16)) return;
-                while (chan != 0) {
+
+                while ((chan != 0) && (idx < 10)) {
                     shortmessage = new ShortMessage();
                     shortmessage.setMessage(command, chan - 1, byteToInt(bytes[1]), byteToInt(bytes[2]));
                     receiver.send(shortmessage, timeStamp);
@@ -328,6 +332,7 @@ public class KeyboardToSoundModule {
                     int offsetidx = startidx + (idx++ * 2);
                     if (offsetidx > (channelOutStruct.length - 1))
                         break;
+
                     chan = channelOutStruct[offsetidx];
                     if ((chan <= 0) || (chan > 16)) return;
 
@@ -355,14 +360,12 @@ public class KeyboardToSoundModule {
             if ( status == 0xf8 ) { return; } // ignore timing messages
             if ( status == 0xfe ) { return; } // ignore status active
 
-            System.out.printf("%d - Status: 0x%s",
-                    timeStamp, Integer.toHexString(status));
+            System.out.printf("%d - Status: 0x%s", timeStamp, Integer.toHexString(status));
 
             // Strip channel number out of status
             int leftNibble = status & 0xf0;
 
-            // These statuses have MIDI channel numbers and data (except
-            // 0xf0 thru 0xff)
+            // These statuses have MIDI channel numbers and data (except 0xf0 thru 0xff)
             switch (leftNibble) {
                 case 0x80: displayNoteOff(message); break;
                 case 0x90: displayNoteOn(message); break;
@@ -426,8 +429,7 @@ public class KeyboardToSoundModule {
                 if ( i > 1 ) {
                     System.out.print("; ");
                 }
-                System.out.printf( "Number %d, Velocity %d",
-                        byteToInt(bytes[i]) , byteToInt(bytes[i + 1]) );
+                System.out.printf( "Number %d, Velocity %d", byteToInt(bytes[i]), byteToInt(bytes[i + 1]) );
             }
 
             System.out.println();
@@ -440,8 +442,7 @@ public class KeyboardToSoundModule {
             }
             else {
                 byte[] bytes = message.getMessage();
-                System.out.printf(" = Note off, Channel %d, Note %d%n",
-                        midiChannelToInt(message), byteToInt(bytes[1]));
+                System.out.printf(" = Note off, Channel %d, Note %d%n", midiChannelToInt(message), byteToInt(bytes[1]));
                 System.out.println();
             }
         }
@@ -454,16 +455,14 @@ public class KeyboardToSoundModule {
                 return;
             }
 
-            System.out.print(" = Controller Change, Channel "
-                    + midiChannelToInt(message) + "\n\t");
+            System.out.print(" = Controller Change, Channel " + midiChannelToInt(message) + "\n\t");
 
             byte[] bytes = message.getMessage();
             for (int i = 1; i < message.getLength(); i += 2) {
                 if ( i > 1 ) {
                     System.out.print("; ");
                 }
-                System.out.printf( "Controller %d, Value %d",
-                        byteToInt(bytes[i]), byteToInt(bytes[i + 1]) );
+                System.out.printf( "Controller %d, Value %d", byteToInt(bytes[i]), byteToInt(bytes[i + 1]) );
             }
 
             System.out.println();
@@ -477,16 +476,14 @@ public class KeyboardToSoundModule {
                 return;
             }
 
-            System.out.print(" = Key Pressure, Channel "
-                    + midiChannelToInt(message) + "\n\t");
+            System.out.print(" = Key Pressure, Channel " + midiChannelToInt(message) + "\n\t");
 
             byte[] bytes = message.getMessage();
             for (int i = 1; i < message.getLength(); i += 2) {
                 if ( i > 1 ) {
                     System.out.print("; ");
                 }
-                System.out.printf( "Note Number %d, Pressure %d",
-                        byteToInt(bytes[i]), byteToInt(bytes[i + 1]) );
+                System.out.printf( "Note Number %d, Pressure %d", byteToInt(bytes[i]), byteToInt(bytes[i + 1]) );
             }
 
             System.out.println();
@@ -500,16 +497,14 @@ public class KeyboardToSoundModule {
                 return;
             }
 
-            System.out.print(" = Pitch Bend, Channel "
-                    + midiChannelToInt(message) + "\n\t");
+            System.out.print(" = Pitch Bend, Channel " + midiChannelToInt(message) + "\n\t");
 
             byte[] bytes = message.getMessage();
             for (int i = 1; i < message.getLength(); i += 2) {
                 if ( i > 1 ) {
                     System.out.print("; ");
                 }
-                System.out.printf( "Value %d",
-                        bytesToInt(bytes[i], bytes[i + 1]) );
+                System.out.printf( "Value %d", bytesToInt(bytes[i], bytes[i + 1]) );
             }
 
             System.out.println();
@@ -522,8 +517,7 @@ public class KeyboardToSoundModule {
                 return;
             }
 
-            System.out.print(" = Program Change, Channel "
-                    + midiChannelToInt(message) + "\n\t");
+            System.out.print(" = Program Change, Channel " + midiChannelToInt(message) + "\n\t");
 
             byte[] bytes = message.getMessage();
             for (int i = 1; i < message.getLength(); i++) {
@@ -541,8 +535,7 @@ public class KeyboardToSoundModule {
                 return;
             }
 
-            System.out.print(" = Channel Pressure, Channel "
-                    + midiChannelToInt(message) + "\n\t");
+            System.out.print(" = Channel Pressure, Channel " + midiChannelToInt(message) + "\n\t");
 
             byte[] bytes = message.getMessage();
             for (int i = 1; i < message.getLength(); i++) {
@@ -569,23 +562,20 @@ public class KeyboardToSoundModule {
                     if (bytes.length < 2) {
                         System.out.println(" Bad Data");
                     } else {
-                        System.out.println(" = MIDI Time Code 1/4 Frame, Time Code "
-                                + byteToInt(bytes[1]));
+                        System.out.println(" = MIDI Time Code 1/4 Frame, Time Code " + byteToInt(bytes[1]));
                     }
                     break;
                 case 0xf2:
                     if (bytes.length < 3) {
                         System.out.println(" Bad Data");
                     } else {
-                        System.out.println(" = Song Position, Pointer "
-                                + bytesToInt(bytes[1], bytes[2]));
+                        System.out.println(" = Song Position, Pointer " + bytesToInt(bytes[1], bytes[2]));
                     }
                 case 0xf3:
                     if (bytes.length < 2) {
                         System.out.println(" Bad Data");
                     } else {
-                        System.out.println(" = Song Select, Song "
-                                + byteToInt(bytes[1]));
+                        System.out.println(" = Song Select, Song " + byteToInt(bytes[1]));
                     }
                     break;
                 case 0xf6:
@@ -638,7 +628,6 @@ public class KeyboardToSoundModule {
         Receiver midircv = null;
         MidiDevice selectedDevice;
 
-        System.out.println("**********************");
         System.out.println("** openMidireceiver **");
 
         try {
@@ -646,9 +635,10 @@ public class KeyboardToSoundModule {
             MidiDevice.Info[] devices = MidiSystem.getMidiDeviceInfo();
 
             if (devices.length == 0) {
-                System.err.println("### Error: No MIDI devices found");
+                System.err.println("Error: No MIDI devices found");
                 return midircv;
-            } else {
+            }
+            else {
                 boolean binit = true;
 
                 // Loop through all devices looking to Synth or Sound Modules
@@ -678,7 +668,7 @@ public class KeyboardToSoundModule {
                 try {
                     selectedDevice.open();
 
-                    System.out.println("Selected MIDI device *** " + selectedDevice.getDeviceInfo().getName() + " ***");
+                    System.out.println("Selected MIDI putput device *** " + selectedDevice.getDeviceInfo().getName() + " ***");
                 }
                 catch (MidiUnavailableException e) {
                     System.err.println("Error selecting MIDI device " + e);
@@ -689,7 +679,7 @@ public class KeyboardToSoundModule {
                 midircv = selectedDevice.getReceiver();
             }
         } catch (MidiUnavailableException ex) {
-            System.err.println("### Error: Could not open MIDI synthesizer: " + ex);
+            System.err.println("Error: Could not open MIDI synthesizer: " + ex);
         }
 
         return midircv;
@@ -733,8 +723,7 @@ public class KeyboardToSoundModule {
     }
 
     // Create a MIDI event and add it to the track
-    private void addMidiEvent(Track track, int command, int channel, int data1,
-                              int data2, int tick) {
+    private void addMidiEvent(Track track, int command, int channel, int data1, int data2, int tick) {
         ShortMessage message = new ShortMessage();
         try {
             message.setMessage(command, channel, data1, data2);
@@ -771,19 +760,24 @@ public class KeyboardToSoundModule {
 
             try {
                 MidiDevice device = MidiSystem.getMidiDevice(info);
-                addDeviceType(device);
-                System.out.println("Maximum receivers: "
-                        + maxToString(device.getMaxReceivers()));
-                System.out.println("Maximum transmitters: "
-                        + maxToString(device.getMaxTransmitters()));
-            } catch (MidiUnavailableException e) {
+                addDeviceType(device, false);
+
+                System.out.println("Maximum receivers: " + maxToString(device.getMaxReceivers()));
+                System.out.println("Maximum transmitters: " + maxToString(device.getMaxTransmitters()));
+            }
+            catch (MidiUnavailableException e) {
                 System.out.println("Can't get MIDI device");
                 e.printStackTrace();
             }
         }
     }
 
-    private void addDeviceType(MidiDevice device) {
+    /*
+     * Add MIDI In and Out Devices to respective lists for future lookup
+     * Flag (override) named 1x IN and 1 x Out Device as active
+     */
+    private void addDeviceType(MidiDevice device, boolean isactive) {
+
         if (device instanceof Sequencer) {
             System.out.println("This is a sequencer");
             InDeviceList.add(new StatusMidiDevice(device, false));
@@ -797,7 +791,7 @@ public class KeyboardToSoundModule {
             if (device.getMaxReceivers() != 0) {
                 System.out.println("IN ");
 
-                boolean isactive = false;
+                //boolean isactive = false;
                 if ( device.getDeviceInfo().getName().contains(selindevice) ) {
                     isactive = true;
                 }
@@ -806,7 +800,7 @@ public class KeyboardToSoundModule {
             if (device.getMaxTransmitters() != 0) {
                 System.out.println("OUT ");
 
-                boolean isactive = false;
+                //boolean isactive = false;
                 if ( device.getDeviceInfo().getName().contains(seloutdevice) ) {
                     isactive = true;
                 }
@@ -833,17 +827,4 @@ public class KeyboardToSoundModule {
         }
     }
 
-    private int mapChannelOut(int chanin) {
-        int chanout = 0;
-
-        // Read start channel. It is a sequence of up to 10 channels, starting with PresetIdx at position 0
-        int firstchan = channelOutStruct[1];
-        chanout = channelOutStruct[1 + (firstchan - chanin) * 2];
-
-        return chanout;
-    }
-
-    public byte[] getChannelOut() {
-        return channelOutStruct;
-    }
 }
