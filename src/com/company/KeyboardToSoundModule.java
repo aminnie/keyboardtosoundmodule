@@ -9,29 +9,16 @@ import com.company.AppConfig;
 // https://github.com/ksnortum/midi-examples/blob/master/src/main/java/net/snortum/play/midi/MidiDeviceDisplay.java
 
 /**
- * Create a connection between a musical keyboard (transmitter) and an internal
- * synthesizer.
+ * Create a connection between a musical keyboard (transmitter) and an internal synthesizer.
  *
  * @author Knute Snortum, Modified by Anton Minnie
  * @version 2021/02/14
  */
 public class KeyboardToSoundModule {
 
-    /**
-     * Name values can have the class name, (see {@link MidiSystem}), the device
-     * name or both. Use a pound sign (#) to separate the class and device name.
-     * Get device names from the {@link MidiDeviceDisplay} program, or leave
-     * empty for default.<p>
-     *
-     * {@code javax.sound.midi.Transmitter#USB Uno MIDI Interface}<br>
-     * {@code javax.sound.midi.Synthesizer#Microsoft MIDI Mapper}<br>
-     */
-    //private static final String TRANS_DEV_NAME = "javax.sound.midi.Transmitter#USB Uno MIDI Interface";
-    //private static final String SYNTH_DEV_NAME = "javax.sound.midi.Synthesizer#Microsoft MIDI Mapper";
-
-    private static final String TRANS_DEV_NAME = "javax.sound.midi.Transmitter#2- Seaboard RISE 49";
-    private static final String SYNTH_DEV_NAME = "javax.sound.midi.Synthesizer#Gervill";
-    private static final String SEQ_DEV_NAME = "default";
+    private static String TRANS_DEV_NAME = "javax.sound.midi.Transmitter#Microsoft MIDI Mapper";
+    private static String SYNTH_DEV_NAME = "javax.sound.midi.Synthesizer#Microsoft MIDI Mapper";
+    private static String SEQ_DEV_NAME = "default";
 
     /** See {@link MidiSystem} for other classes */
     private static final String TRANS_PROP_KEY = "javax.sound.midi.Transmitter";
@@ -41,9 +28,13 @@ public class KeyboardToSoundModule {
     Synthesizer synthesizer;
     Sequencer sequencer;
     Receiver midircv;
+    AMidiFXReceiver displayReceiver;
 
-    private String selindevice = "2- Seaboard RISE 49";
-    private String seloutdevice = "Deebach-Blackbox";
+    AppConfig config;
+    //private String selindevice = "2- Seaboard RISE 49";
+    //private String seloutdevice = "Deebach-Blackbox";
+    private String selindevice = "default";
+    private String seloutdevice = "default";
 
     final List<StatusMidiDevice> InDeviceList = new ArrayList<>();
     final List<StatusMidiDevice> OutDeviceList = new ArrayList<>();
@@ -73,18 +64,27 @@ public class KeyboardToSoundModule {
      * Start of main utility
      */
     public static void main(String[] args) {
-        //new net.snortum.play.midi.KeyboardToSoundModule().run();
         new com.company.KeyboardToSoundModule().run();
     }
 
     private void run() {
 
+        // Initialize Input and Output Device Lists
+        loadMidiDevices();
+        listInDevices();
+        listOutDevices();
+
         // Load Config File Properties
-        AppConfig config = new AppConfig();
+        config = new AppConfig();
         if (!config.loadProperties()) {
             System.err.println("Failed to load AppConfig file!");
             System.exit(-1);
         }
+
+        // Pretend we set it in the user interface after listing available IN and OUT devices
+        config.setInDevice("2- Seaboard RISE 49");
+        config.setOutDevice("Deebach-Blackbox");
+
         if (!config.saveProperties()) {
             System.err.println("Failed to save AppConfig file!");
             System.exit(-1);
@@ -93,12 +93,6 @@ public class KeyboardToSoundModule {
         selindevice = config.getInDevice();
         seloutdevice = config.getOutDevice();
 
-        // Initialize Input and Output Device Lists
-        loadMidiDevices();
-
-        listInDevices();
-        listOutDevices();
-
         try {
             // Get output Synth or external Sound Module
             midircv = openMidiReceiver();
@@ -106,16 +100,18 @@ public class KeyboardToSoundModule {
                 return;
             }
 
-            // Get a transmitter and synthesizer from their device names using system properties or defaults
-            Transmitter trans = getTransmitter();
-            if (trans == null) {
-                return;
-            }
-
             // Get receiver from the synthesizer, then set it in transmitter.
+            // Get a transmitter and synthesizer from their device names using system properties or defaults
             //trans.setReceiver(midircv);
-            AMidiFXReceiver displayReceiver = new AMidiFXReceiver(midircv); // optional
-            trans.setReceiver(displayReceiver); // or just "receiver"
+            displayReceiver = new AMidiFXReceiver(midircv); // optional
+            Transmitter trans = getTransmitter();
+            if (trans != null) {
+                trans.setReceiver(displayReceiver); // or just "receiver"
+
+                System.out.println("Ready to play your USB keyboard...");
+            }
+            else
+                System.out.println("No musical keyboard connected! Please connect USB keyboard proceed.");
 
             // Get default sequencer, if it exists
             sequencer = getSequencer();
@@ -126,10 +122,8 @@ public class KeyboardToSoundModule {
             sequencer.open();
             sequencer.getTransmitter().setReceiver(midircv);
 
-            System.out.println("Play on your musical keyboard...");
-
             // Demo Play Sequencer Song in parallel with Keyboard input
-            playDemoSequence(1);
+            playDemoSequence(5);
 
             sequencer.close();
         }
@@ -142,7 +136,7 @@ public class KeyboardToSoundModule {
     // Play Song on Sequencer
     private void playDemoSequence(int replaycnt) {
 
-        for (int i = 0; i < replaycnt; i++) {
+        for (int i = 1; i <= replaycnt; i++) {
             System.out.println("Starting Demo Sequencer Play:" + i);
 
             sequencer.setTempoInBPM(144.0f);
@@ -190,6 +184,13 @@ public class KeyboardToSoundModule {
      * Return a specific transmitter object by setting the system property, otherwise the default
      */
     private Transmitter getTransmitter() {
+
+        String indevice = config.getInDevice();
+        if (!indevice.isEmpty()) {
+            TRANS_DEV_NAME = TRANS_PROP_KEY + "#" + indevice;
+            System.out.println("TRANS_DEV_NAME set to: " + TRANS_DEV_NAME);
+        }
+
         if (! TRANS_DEV_NAME.isEmpty() && ! "default".equalsIgnoreCase(TRANS_DEV_NAME)) {
             System.setProperty(TRANS_PROP_KEY, TRANS_DEV_NAME);
         }
@@ -198,8 +199,8 @@ public class KeyboardToSoundModule {
             return MidiSystem.getTransmitter();
         }
         catch (MidiUnavailableException e) {
-            System.err.println("Error getting transmitter");
-            e.printStackTrace();
+            System.err.println("No External MIDI keyboard available! Please connect a USB keyboard.");
+            //e.printStackTrace();
             return null;
         }
     }
@@ -297,7 +298,7 @@ public class KeyboardToSoundModule {
             ShortMessage shortmessage;
 
             if (message.getLength() < 3 || message.getLength() % 2 == 0) {
-                System.out.println("Unable to Layer Bad MIDI message");
+                System.out.println("Unable to Layer/Output Bad MIDI message");
                 return;
             }
 
@@ -629,7 +630,7 @@ public class KeyboardToSoundModule {
         Receiver midircv = null;
         MidiDevice selectedDevice;
 
-        System.out.println("** openMidireceiver **");
+        System.out.println("** openMidiReceiver **");
 
         try {
             selectedDevice = MidiSystem.getSynthesizer();
@@ -647,19 +648,21 @@ public class KeyboardToSoundModule {
                     if (MidiSystem.getMidiDevice(dev).getMaxReceivers() == 0) {
                         continue;
                     }
+
                     if (binit) {
                         // Default to first device and override with preferred
                         selectedDevice = MidiSystem.getMidiDevice(dev);
                         binit = false;
+
+                        System.out.println("Default MIDI Out Device: " + dev.toString());
                     }
+                    else
+                        System.out.println("Found MIDI Out Device " + dev.getName());
 
-                    System.out.println("Found MIDI Device " + dev.getName());
-
-                    //if (dev.getName().contains("Gervill") && dev instanceof Synthesizer)  {
                     if ( dev.getName().contains(seloutdevice) ) {
                         selectedDevice = MidiSystem.getMidiDevice(dev);
 
-                        System.out.println("Selected MIDI Device Info: " + dev.toString());
+                        System.out.println("Matched preferred MIDI Device: " + dev.toString());
                         break;
                     }
                 }
@@ -669,10 +672,10 @@ public class KeyboardToSoundModule {
                 try {
                     selectedDevice.open();
 
-                    System.out.println("Selected MIDI putput device *** " + selectedDevice.getDeviceInfo().getName() + " ***");
+                    System.out.println("Opened MIDI Out Device *** " + selectedDevice.getDeviceInfo().getName() + " ***");
                 }
                 catch (MidiUnavailableException e) {
-                    System.err.println("Error selecting MIDI device " + e);
+                    System.err.println("Error selecting MIDI Out device " + e);
                     return midircv;
                 }
 
@@ -817,14 +820,14 @@ public class KeyboardToSoundModule {
     public void listInDevices() {
         System.out.println("**********************");
         for (StatusMidiDevice statusdevice : InDeviceList ) {
-            System.out.println("MIDI In Device:" + statusdevice.toString());
+            System.out.println("MIDI In:" + statusdevice.toString());
         }
     }
 
     public void listOutDevices() {
         System.out.println("**********************");
         for (StatusMidiDevice statusdevice : OutDeviceList ) {
-            System.out.println("MIDI Out Device:" + statusdevice.toString());
+            System.out.println("MIDI Out:" + statusdevice.toString());
         }
     }
 

@@ -12,6 +12,8 @@ public class AppConfig {
 
     public boolean loadProperties() {
 
+        System.out.println("Loading Properties from disk: " + configPath);
+
         try {
             configProps.loadFromXML(new FileInputStream(configPath));
 
@@ -37,6 +39,7 @@ public class AppConfig {
             configProps.storeToXML(new FileOutputStream(configPath), "Saved to XML file");
 
             // get the property value and print it out
+            System.out.println("Saving Properties to disk: " + configPath);
             System.out.println("Config: App Name " +  configProps.getProperty("appname"));
             System.out.println("Config: App Version " +  configProps.getProperty("appversion"));
             System.out.println("Config: App Date " +  configProps.getProperty("appdate"));
@@ -58,9 +61,23 @@ public class AppConfig {
         return configProps.getProperty("indevice");
     }
 
+    // Set selected Midi In device - Keyboard
+    public void setInDevice(String indevice) {
+        configProps.setProperty("indevice", indevice);
+
+        System.out.println("Property indevice set to:" + configProps.getProperty("indevice"));
+    }
+
     // Get selected Out Midi device - Sound Module
     public String getOutDevice() {
         return configProps.getProperty("outdevice");
+    }
+
+    // Set selected Midi Out device - Keyboard
+    public void setOutDevice(String outdevice) {
+        configProps.setProperty("outdevice", outdevice);
+
+        System.out.println("Property outdevice set to:" + configProps.getProperty("outdevice"));
     }
 
     // Get selected Out Midi device - Sound Module
