@@ -1,10 +1,10 @@
-package net.snortum.play.midi;
-
-import com.company.AppConfig;
+package com.company;
 
 import javax.sound.midi.*;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.company.AppConfig;
 
 // https://github.com/ksnortum/midi-examples/blob/master/src/main/java/net/snortum/play/midi/MidiDeviceDisplay.java
 
@@ -73,7 +73,8 @@ public class KeyboardToSoundModule {
      * Start of main utility
      */
     public static void main(String[] args) {
-        new net.snortum.play.midi.KeyboardToSoundModule().run();
+        //new net.snortum.play.midi.KeyboardToSoundModule().run();
+        new com.company.KeyboardToSoundModule().run();
     }
 
     private void run() {

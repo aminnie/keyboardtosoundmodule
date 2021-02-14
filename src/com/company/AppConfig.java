@@ -8,7 +8,7 @@ public class AppConfig {
     Properties configProps = new Properties();
 
     String rootPath = Thread.currentThread().getContextClassLoader().getResource("").getPath();
-    String configPath = rootPath + "config.xml";
+    String configPath = rootPath + "AppConfig.xml";
 
     public boolean loadProperties() {
 
